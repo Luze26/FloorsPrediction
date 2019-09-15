@@ -1,0 +1,122 @@
+---
+title: "AI for Climate Change"
+author: "Darrell Aucoin"
+date: "September 15, 2019"
+output: beamer_presentation
+---
+<style type="text/css">
+
+body, td {
+   font-size: 14px;
+}
+code.r{
+  font-size: 6px;
+}
+pre {
+  font-size: 6px
+}
+</style>
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+options(tinytex.verbose = TRUE)
+library(ggmap)
+register_google(key="AIzaSyB9dp9hNH5c0qpuOgqekof9mBmkSDepuv4")
+```
+
+
+## What We Did/Learn
+
+- Read Shape files
+- Plot the data
+- Created a linear regression model predicting average height of building based on evevation and building area
+
+
+## Load Libraries
+First load the libraries we need
+```{r libraries, echo = FALSE}
+library(maptools)
+library(rgdal)
+library(RColorBrewer)
+library(ggmap)
+```
+
+## Ivestigate Data
+Then invesigate what data we have.
+
+```{r dataframe, echo=FALSE}
+montreal.area <- readOGR("C:/Users/15148/Documents/ai_climate/satelite/shapefiles/Autobuilding_QC_VILLE_MONTREAL_shp/Autobuilding_QC_VILLE_MONTREAL.shp")
+```
+```{r df, echo=TRUE}
+head(montreal.area@data)
+```
+
+## Variables of Interest
+The only variables of interest is height, elevation, and building area. We are given the min and max values of height and evelation. To use these variables, we will take the average.
+```{r addtodata, echo=TRUE}
+montreal.area@data["height_avg"] = (montreal.area@data["heightmin"] + montreal.area@data["heightmax"]) / 2
+montreal.area@data["elev_avg"] = (montreal.area@data["elevmin"] + montreal.area@data["elevmax"]) / 2
+montreal.area@data["height_range"] = (montreal.area@data["heightmax"] - montreal.area@data["heightmin"])
+montreal.area@data["elev_range"] = (montreal.area@data["elevmax"] - montreal.area@data["elevmin"])
+head(montreal.area@data[c("height_avg", "elev_avg", "bldgarea")])
+```
+
+## Plotting
+```{r plotting_func, echo=TRUE}
+colors <- brewer.pal(9, "PuRd")
+plot.buildings <- function(buildings, lon, lat, maptype="terrain", zoom=12){
+  mapImage <- get_map(location = c(lon = lon, lat = lat),
+                      color = "color",
+                      source = "google",
+                      maptype = maptype,
+                      zoom =zoom)
+  area.points <- fortify(buildings)
+  building.map <- ggmap(mapImage) +
+                    geom_polygon(aes(x = long,
+                                      y = lat,
+                                      group = group),
+                              data = area.points,
+                              color = colors[9],
+                              fill = colors[4],
+                              alpha = 0.5) +
+                    labs(x = "Longitude",
+                        y = "Latitude")
+  return(building.map)
+}
+```
+
+## Quick Inspection of Spatial Data
+```{r plot_buildings, echo=FALSE}
+plot.buildings(montreal.area, lon=-73.561668, lat=45.508888, maptype="terrain", zoom=14)
+```
+
+## Simple Linear Regression model
+First try out a simple linear regression model
+```{r models, echo=TRUE}
+avg_model = lm(height_avg ~ elev_avg + bldgarea, data=montreal.area@data)
+min_model = lm(heightmin ~ elevmin + bldgarea, data=montreal.area@data)
+max_model = lm(heightmax ~ elevmax + bldgarea, data=montreal.area@data)
+summary(avg_model)
+```
+## Min Model
+
+```{r minmodel, echo=TRUE}
+summary(min_model)
+```
+
+
+## Max Model
+
+```{r maxmodel, echo=TRUE}
+summary(max_model)
+```
+## Investigate Uncertainty
+```{r uncertainty, echo=TRUE}
+plot(montreal.area@data$elev_range, montreal.area@data$height_range, main="Uncertainty", xlab="Elevation Range", ylab="Height range")
+```
+
+## Conclusion
+While all of the coefficients have low p-values, indicating a good model, we should consider that the coefficients for the min height model is negative. The uncertainty in the estimate increases as building area and elevation increases.
+
+The absolute value of the average and max height estimate model coefficients for buidling area is greater than the coeffient for buidling area in the min height model.
+`1.184e-03> abs(-9.501e-05), 5.516e-04 > abs(-9.501e-05)`
+This would indicate that building area might be a good predictor for height in later models.
